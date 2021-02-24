@@ -102,10 +102,13 @@ void loop(void)
         debugI("Brûleur ON pendant %d \n", rTime);
         totalBurnerTime += rTime / 1000;
         // add to daily counter
-        if (getCurrentDay() != currentDay)
+        int day = getCurrentDay();
+        if (day != currentDay)
         {
           //new day : reset daily counter
           dailyBurnerTime = rTime / 1000;
+          //set day
+          currentDay = day;
           debugI("new day : reset daily counter /n");
         }
         else
