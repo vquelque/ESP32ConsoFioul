@@ -12,7 +12,8 @@ To compile the code, you should add a "credentials.h" file inside the src folder
 ```c
 #define WIFI_SSID "Your WIFI SSID"
 #define WIFI_PASSWD "Your WIFI password"
-#define WRITE_API_KEY = "Your thingspeak read API key"
+#define WRITE_API_KEY = "Your thingspeak write API key"
+#define READ_API_KEY = "Your thingspeak read API key"
 ```
 
 # Final build
