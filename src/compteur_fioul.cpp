@@ -7,11 +7,20 @@
 #include "credentials.h"
 #include "RemoteDebug.h" //wireless debugging
 #include "ThingSpeak.h"
+#include <Preferences.h>
+//OTA update
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncElegantOTA.h>
 
 #define sec_to_ms(T) (T * 1000L)
 #define RG_THRESHOLD 10
-#define B_THRESHOLD 1
+#define B_THRESHOLD 2
 #define POSTING_INTERVAL 30 * 1000L //send data to thingspeak maximum every 30sec
+// PREFERENCES
+#define LAST_COUNTER_DAY_PREF "DAY"
+#define DAILY_COUNTER_PREF "DAILY"
+#define TOTAL_BURNER_TIME_PREF "TOTAL"
 
 /* WiFi configuration */
 const char *ssid = WIFI_SSID;
@@ -39,16 +48,27 @@ const long gmtOffset_sec = 3600; //PARIS UTC+1
 const int daylightOffset_sec = 3600;
 int currentDay = -1;
 
+/* Preferences */
+Preferences preferences;
+
+/* Web server */
+AsyncWebServer server(80);
+
 int wifiSetup(void);
 bool isBurnerOn();
 unsigned long runningTime(unsigned long startTime, unsigned long stopTime);
 void sendThingSpeakhttpRequest(unsigned long rTime, unsigned long burnerTime, unsigned long totalBurnerTime);
 int getCurrentDay();
-void loadLastCounterFromThingsSpeak();
+void loadLastCounterFromPreferences();
 
 void setup(void)
 {
   Serial.begin(115200);
+  Serial.println("Starting...");
+
+  //Open preferences in "counter" namespace in RW mode
+  preferences.begin("counter", false);
+  preferences.clear();
 
   //initialize thingspeak client
   ThingSpeak.begin(client);
@@ -56,20 +76,36 @@ void setup(void)
   //wifi setup
   wifiSetup();
 
+  //OTA server
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(200, "text/plain", "Hi! I am ESP32 and couting fioul consumption."); });
+  server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+              dailyBurnerTime = 0;
+              totalBurnerTime = 0;
+              preferences.putULong(DAILY_COUNTER_PREF, dailyBurnerTime);
+              preferences.putULong(TOTAL_BURNER_TIME_PREF, totalBurnerTime);
+              request->send(200, "text/plain", "Fioul conter succesfully reset.");
+            });
+  AsyncElegantOTA.begin(&server); // Start ElegantOTA
+  server.begin();
+  Serial.println("HTTP server started");
+
   // Sync NTP time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  getCurrentDay();
 
   //TCS setup
   Wire.begin();
   if (!tcs.attach(Wire))
-    Serial.println("ERROR: TCS34725 NOT FOUND !!!");
+    Serial.println("ERROR: TCS34725 NOT FOUND !");
   tcs.integrationTime(50); // ms
   tcs.gain(TCS34725::Gain::X01);
 
   Debug.begin(WiFi.getHostname());
 
-  //load last total and daily value from thingspeak (in case of restart)
-  loadLastCounterFromThingsSpeak();
+  //load last total and daily value from preferences (in case of restart)
+  loadLastCounterFromPreferences();
   // ready to goto loop
 }
 
@@ -98,23 +134,26 @@ void loop(void)
       {
         //burner was on
         burnerPreviouslyOn = false;
-        debugI("Brûleur OFF \n");
-        debugI("Brûleur ON pendant %d \n", rTime);
+        debugI("Brûleur OFF \n. Brûleur ON pendant %d \n", rTime);
         totalBurnerTime += rTime / 1000;
+        preferences.putULong(TOTAL_BURNER_TIME_PREF, totalBurnerTime);
         // add to daily counter
         int day = getCurrentDay();
-        if (day != currentDay)
+        if (day != currentDay && day != -1)
         {
           //new day : reset daily counter
           dailyBurnerTime = rTime / 1000;
           //set day
           currentDay = day;
-          debugI("new day : reset daily counter /n");
+          preferences.putInt(LAST_COUNTER_DAY_PREF, currentDay);
+          preferences.putULong(DAILY_COUNTER_PREF, dailyBurnerTime);
+          debugI("New day : reset daily counter \n");
         }
         else
         {
           dailyBurnerTime += rTime / 1000;
-          debugV("same day \n");
+          preferences.putULong(DAILY_COUNTER_PREF, dailyBurnerTime);
+          debugV("Same day \n");
         }
 
         //send to thingspeak
@@ -217,38 +256,14 @@ int getCurrentDay()
   return timeinfo.tm_yday;
 }
 
-void loadLastCounterFromThingsSpeak()
+void loadLastCounterFromPreferences()
 {
   // Read in field 2 and 3 of the private channel
-  long totalCounter = ThingSpeak.readLongField(CHANNEL_ID, 3, READ_API_KEY);
-  long dailyCounter = ThingSpeak.readLongField(CHANNEL_ID, 2, READ_API_KEY);
-  String created_at = ThingSpeak.readCreatedAt(CHANNEL_ID, READ_API_KEY);
-  if (totalCounter > 0)
+  totalBurnerTime = preferences.getULong(TOTAL_BURNER_TIME_PREF, 0);
+  int lastCounterDay = preferences.getInt(LAST_COUNTER_DAY_PREF, -1);
+  if (lastCounterDay == getCurrentDay())
   {
-    totalBurnerTime = totalCounter;
-  }
-  // Check the status of the read operation to see if it was successful
-  int statusCode = ThingSpeak.getLastReadStatus();
-  if (statusCode == 200)
-  {
-    Serial.println("Successfully loaded counters from thingspeak");
-  }
-  else
-  {
-    Serial.printf("Problem loading counters from thingspeak. Status code : %d \n", statusCode);
-  }
-  struct tm tm;
-  if (strptime(created_at.c_str(), "%y-%m-%dT%H:%M:%S", &tm) == NULL)
-  {
-    Serial.println("error parsing timestamp from ThingSpeak");
-    Serial.println(created_at.c_str());
-  }
-  else
-  {
-    if (tm.tm_yday == getCurrentDay() && dailyCounter > 0)
-    {
-      dailyBurnerTime = dailyCounter;
-      Serial.printf("Loaded counter for the day from thingspeak. Day : %u, Total : %u \n", dailyBurnerTime, totalBurnerTime);
-    }
+    dailyBurnerTime = preferences.getULong(DAILY_COUNTER_PREF, 0);
+    Serial.printf("Loaded counter for the day from memory. Day : %u, Total : %u \n", dailyBurnerTime, totalBurnerTime);
   }
 }
