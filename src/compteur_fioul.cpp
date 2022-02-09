@@ -92,12 +92,12 @@ void setup(void)
                 unsigned long totalCtr = request->getParam("totalCtr")->value().toInt();
                 if (totalCtr > 0)
                 {
-                  debugI("Total burner time initialized with value %u \n", totalCtr);
+                  debugI("Total burner time initialized with value %u", totalCtr);
                   preferences.putULong(TOTAL_BURNER_TIME_PREF, totalCtr);
                   totalBurnerTime = totalCtr;
                 }
                 char s[128];
-                snprintf(s, sizeof(s), "Fioul counter successfuly initialized with value %d \n", totalCtr);
+                snprintf(s, sizeof(s), "Fioul counter successfuly initialized with value %d", totalCtr);
                 request->send(200, "text/plain", s);
               }
               request->send(400, "text/plain", "Bad request parameters"); });
@@ -112,7 +112,7 @@ void setup(void)
   // TCS setup
   Wire.begin();
   if (!tcs.attach(Wire))
-    Serial.println("ERROR: TCS34725 NOT FOUND !");
+    Serial.println("ERROR: TCS34725 NOT FOUND ! \n");
   tcs.integrationTime(50); // ms
   tcs.gain(TCS34725::Gain::X01);
 
@@ -133,7 +133,7 @@ void loop(void)
       // initialize times
       startTime = millis();
       burnerPreviouslyOn = true;
-      debugI("Brûleur ON");
+      debugI("Burner ON \n");
     }
   }
   else
@@ -148,7 +148,7 @@ void loop(void)
       {
         // burner was on
         burnerPreviouslyOn = false;
-        debugI("Brûleur OFF \n. Brûleur ON pendant %d \n", rTime);
+        debugI("Burner OFF \n. Burner ON for %d \n", rTime);
         totalBurnerTime += rTime / 1000;
         preferences.putULong(TOTAL_BURNER_TIME_PREF, totalBurnerTime);
         // add to daily counter
@@ -180,7 +180,7 @@ void loop(void)
       {
         burnerPreviouslyOn = false;
         // false positive
-        debugI("Faux positif");
+        debugI("False positive. Ignored. \n");
       }
     }
   }
@@ -264,7 +264,7 @@ int getCurrentDay()
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo))
   {
-    debugW("Failed to obtain time");
+    debugW("Failed to obtain time \n");
     return -1;
   }
   return timeinfo.tm_yday;
@@ -272,12 +272,11 @@ int getCurrentDay()
 
 void loadLastCounterFromPreferences()
 {
-  // Read in field 2 and 3 of the private channel
   totalBurnerTime = preferences.getULong(TOTAL_BURNER_TIME_PREF, 0);
   int lastCounterDay = preferences.getInt(LAST_COUNTER_DAY_PREF, -1);
   if (lastCounterDay == getCurrentDay())
   {
     dailyBurnerTime = preferences.getULong(DAILY_COUNTER_PREF, 0);
-    Serial.printf("Loaded counter for the day from memory. Day : %u, Total : %u \n", dailyBurnerTime, totalBurnerTime);
+    debugI("Loaded counter for the day from memory. Day : %u, Total : %u \n", dailyBurnerTime, totalBurnerTime);
   }
 }
