@@ -8,7 +8,7 @@
 #include "RemoteDebug.h" //wireless debugging
 #include "ThingSpeak.h"
 #include <Preferences.h>
-//OTA update
+// OTA update
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncElegantOTA.h>
@@ -16,7 +16,7 @@
 #define sec_to_ms(T) (T * 1000L)
 #define RG_THRESHOLD 10
 #define B_THRESHOLD 2
-#define POSTING_INTERVAL 30 * 1000L //send data to thingspeak maximum every 30sec
+#define POSTING_INTERVAL 30 * 1000L // send data to thingspeak maximum every 30sec
 // PREFERENCES
 #define LAST_COUNTER_DAY_PREF "DAY"
 #define DAILY_COUNTER_PREF "DAILY"
@@ -39,12 +39,12 @@ RemoteDebug Debug;
 /* Counters */
 bool burnerPreviouslyOn = false;
 unsigned long startTime = 0;
-unsigned long dailyBurnerTime = 0; //cumulative burner time in seconds for the day
-unsigned long totalBurnerTime = 0; //cumulative burner time in seconds for the year
+unsigned long dailyBurnerTime = 0; // cumulative burner time in seconds for the day
+unsigned long totalBurnerTime = 0; // cumulative burner time in seconds for the year
 
 /* NTP & Time */
 const char *ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 3600; //PARIS UTC+1
+const long gmtOffset_sec = 3600; // PARIS UTC+1
 const int daylightOffset_sec = 3600;
 int currentDay = -1;
 
@@ -66,17 +66,16 @@ void setup(void)
   Serial.begin(115200);
   Serial.println("Starting...");
 
-  //Open preferences in "counter" namespace in RW mode
+  // Open preferences in "counter" namespace in RW mode
   preferences.begin("counter", false);
-  preferences.clear();
 
-  //initialize thingspeak client
+  // initialize thingspeak client
   ThingSpeak.begin(client);
 
-  //wifi setup
+  // wifi setup
   wifiSetup();
 
-  //OTA server
+  // OTA server
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "text/plain", "Hi! I am ESP32 and couting fioul consumption."); });
   server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -85,8 +84,23 @@ void setup(void)
               totalBurnerTime = 0;
               preferences.putULong(DAILY_COUNTER_PREF, dailyBurnerTime);
               preferences.putULong(TOTAL_BURNER_TIME_PREF, totalBurnerTime);
-              request->send(200, "text/plain", "Fioul conter succesfully reset.");
-            });
+              request->send(200, "text/plain", "Fioul conter succesfully reset."); });
+  server.on("/set", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+              if (request->hasParam("totalCtr"))
+              {
+                unsigned long totalCtr = request->getParam("totalCtr")->value().toInt();
+                if (totalCtr > 0)
+                {
+                  debugI("Total burner time initialized with value %u \n", totalCtr);
+                  preferences.putULong(TOTAL_BURNER_TIME_PREF, totalCtr);
+                  totalBurnerTime = totalCtr;
+                }
+                char s[128];
+                snprintf(s, sizeof(s), "Fioul counter successfuly initialized with value %d \n", totalCtr);
+                request->send(200, "text/plain", s);
+              }
+              request->send(400, "text/plain", "Bad request parameters"); });
   AsyncElegantOTA.begin(&server); // Start ElegantOTA
   server.begin();
   Serial.println("HTTP server started");
@@ -95,7 +109,7 @@ void setup(void)
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   getCurrentDay();
 
-  //TCS setup
+  // TCS setup
   Wire.begin();
   if (!tcs.attach(Wire))
     Serial.println("ERROR: TCS34725 NOT FOUND !");
@@ -104,7 +118,7 @@ void setup(void)
 
   Debug.begin(WiFi.getHostname());
 
-  //load last total and daily value from preferences (in case of restart)
+  // load last total and daily value from preferences (in case of restart)
   loadLastCounterFromPreferences();
   // ready to goto loop
 }
@@ -116,7 +130,7 @@ void loop(void)
   {
     if (!burnerPreviouslyOn)
     {
-      //initialize times
+      // initialize times
       startTime = millis();
       burnerPreviouslyOn = true;
       debugI("Brûleur ON");
@@ -125,14 +139,14 @@ void loop(void)
   else
   {
     unsigned long currTime = millis();
-    //burner turned off
+    // burner turned off
     if (burnerPreviouslyOn)
     {
-      //check if it was really on or only in preheating mode (status LED was flashing)
+      // check if it was really on or only in preheating mode (status LED was flashing)
       unsigned long rTime = runningTime(startTime, currTime);
       if (rTime > sec_to_ms(5))
       {
-        //burner was on
+        // burner was on
         burnerPreviouslyOn = false;
         debugI("Brûleur OFF \n. Brûleur ON pendant %d \n", rTime);
         totalBurnerTime += rTime / 1000;
@@ -141,9 +155,9 @@ void loop(void)
         int day = getCurrentDay();
         if (day != currentDay && day != -1)
         {
-          //new day : reset daily counter
+          // new day : reset daily counter
           dailyBurnerTime = rTime / 1000;
-          //set day
+          // set day
           currentDay = day;
           preferences.putInt(LAST_COUNTER_DAY_PREF, currentDay);
           preferences.putULong(DAILY_COUNTER_PREF, dailyBurnerTime);
@@ -156,7 +170,7 @@ void loop(void)
           debugV("Same day \n");
         }
 
-        //send to thingspeak
+        // send to thingspeak
         if (currTime - lastConnectionTime > POSTING_INTERVAL)
         {
           sendThingSpeakhttpRequest(rTime / 1000, dailyBurnerTime, totalBurnerTime);
@@ -165,7 +179,7 @@ void loop(void)
       else
       {
         burnerPreviouslyOn = false;
-        //false positive
+        // false positive
         debugI("Faux positif");
       }
     }
@@ -179,7 +193,7 @@ void loop(void)
     Debug.printf(s);
     delay(2000);
   }
-  Debug.handle(); //remote debug
+  Debug.handle(); // remote debug
 }
 
 /* utility functions */
