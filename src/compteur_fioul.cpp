@@ -78,6 +78,11 @@ void setup(void)
   // OTA server
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "text/plain", "Hi! I am ESP32 and couting fioul consumption."); });
+  server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request)
+            { 
+              char s[128];
+              snprintf(s, sizeof(s), "Total ctr: %d, Day ctr: %d", totalBurnerTime, dailyBurnerTime);
+              request->send(200, "text/plain", s); });
   server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request)
             {
               dailyBurnerTime = 0;
@@ -273,10 +278,7 @@ int getCurrentDay()
 void loadLastCounterFromPreferences()
 {
   totalBurnerTime = preferences.getULong(TOTAL_BURNER_TIME_PREF, 0);
-  int lastCounterDay = preferences.getInt(LAST_COUNTER_DAY_PREF, -1);
-  if (lastCounterDay == getCurrentDay())
-  {
-    dailyBurnerTime = preferences.getULong(DAILY_COUNTER_PREF, 0);
-    debugI("Loaded counter for the day from memory. Day : %u, Total : %u \n", dailyBurnerTime, totalBurnerTime);
-  }
+  currentDay = preferences.getInt(LAST_COUNTER_DAY_PREF, -1);
+  dailyBurnerTime = preferences.getULong(DAILY_COUNTER_PREF, 0);
+  debugI("Loaded counters from memory: Day : %u, Total : %u \n", dailyBurnerTime, totalBurnerTime);
 }
