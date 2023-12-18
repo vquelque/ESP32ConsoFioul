@@ -16,6 +16,14 @@ To compile the code, you should add a "credentials.h" file inside the src folder
 #define READ_API_KEY = "Your thingspeak read API key"
 ```
 
+# Features
+
+We built an HTTP server to get/set the total and daily counter values. 
+You can:
+- GET `/get` to retrieve the daily and total counter values.
+- GET `/reset` to reset both the daily and total counters.
+- GET `/set` with param `?totalCtr` to set the total counter value. Note that this won't reset the daily counter.
+
 # Final build
 
 Amazing Apple custom builded case...
